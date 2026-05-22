@@ -1,3 +1,32 @@
 .env
 backend/.env
 **/.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Worker artifacts
+worker/anomaly_model.pkl
+*.pkl
+
+# Data files (downloaded/seeded, not source)
+/infra/data/
+
+# Node/Angular
+frontend/node_modules/
+frontend/.angular/
+frontend/dist/
+frontend/.nx/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# macOS
+.DS_Store
