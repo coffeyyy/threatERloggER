@@ -29,4 +29,5 @@ frontend/.nx/
 *.swp
 
 # macOS
-.DS_Store
+.DS_Store.env.aws
+.env.aws
