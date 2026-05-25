@@ -1,0 +1,40 @@
+{
+  "family": "threaterlogger-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "operatingSystemFamily": "LINUX",
+    "cpuArchitecture": "X86_64"
+  },
+  "executionRoleArn": "arn:aws:iam::066949052004:role/threaterloggerTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "066949052004.dkr.ecr.us-east-2.amazonaws.com/threaterlogger-worker:latest",
+      "essential": true,
+      "environment": [
+        { "name": "CHAT_MODEL", "value": "gemini-2.5-flash" },
+        { "name": "POLL_INTERVAL_SEC", "value": "3" },
+        { "name": "EMBED_BATCH_SIZE", "value": "20" },
+        { "name": "ENRICH_BATCH_SIZE", "value": "10" },
+        { "name": "ENRICH_CONCURRENCY", "value": "5" },
+        { "name": "ANOMALY_THRESHOLD", "value": "-0.05" },
+        { "name": "ANOMALY_MODEL_PATH", "value": "anomaly_model.pkl" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",   "valueFrom": "arn:aws:secretsmanager:us-east-2:066949052004:secret:threaterlogger/database-url-mLV5Cf" },
+        { "name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:us-east-2:066949052004:secret:threaterlogger/gemini-api-key-KtkPB5" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/threaterlogger-worker",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

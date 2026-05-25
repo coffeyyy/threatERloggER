@@ -1,0 +1,48 @@
+{
+  "family": "threaterlogger-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "runtimePlatform": {
+    "operatingSystemFamily": "LINUX",
+    "cpuArchitecture": "X86_64"
+  },
+  "executionRoleArn": "arn:aws:iam::066949052004:role/threaterloggerTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "066949052004.dkr.ecr.us-east-2.amazonaws.com/threaterlogger-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "CHAT_MODEL", "value": "gemini-2.5-flash" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL",    "valueFrom": "arn:aws:secretsmanager:us-east-2:066949052004:secret:threaterlogger/database-url-mLV5Cf" },
+        { "name": "GEMINI_API_KEY",  "valueFrom": "arn:aws:secretsmanager:us-east-2:066949052004:secret:threaterlogger/gemini-api-key-KtkPB5" },
+        { "name": "API_TOKEN",       "valueFrom": "arn:aws:secretsmanager:us-east-2:066949052004:secret:threaterlogger/api-token-KfzocR" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/threaterlogger-backend",
+          "awslogs-region": "us-east-2",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      }
+    }
+  ]
+}

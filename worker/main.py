@@ -27,10 +27,10 @@ logging.basicConfig(
 )
 log = logging.getLogger("worker")
 
-POLL_INTERVAL = float(os.getenv("POLL_INTERVAL_SEC", "2"))
-EMBED_BATCH = int(os.getenv("EMBED_BATCH_SIZE", "100"))
-ENRICH_BATCH = int(os.getenv("ENRICH_BATCH_SIZE", "20"))
-ENRICH_CONCURRENCY = int(os.getenv("ENRICH_CONCURRENCY", "10"))
+POLL_INTERVAL = float(os.getenv("POLL_INTERVAL_SEC", "8"))
+EMBED_BATCH = int(os.getenv("EMBED_BATCH_SIZE", "5"))
+ENRICH_BATCH = int(os.getenv("ENRICH_BATCH_SIZE", "3"))
+ENRICH_CONCURRENCY = int(os.getenv("ENRICH_CONCURRENCY", "1"))
 
 
 def embedding_pass() -> int:

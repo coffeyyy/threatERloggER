@@ -6,6 +6,9 @@ from datetime import datetime
 import os
 from dotenv import load_dotenv
 import uvicorn
+import secrets
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 load_dotenv()
 
@@ -26,6 +29,21 @@ if not DB_URL:
 elif DB_URL:
     print("successfully grabbed DB_URL")
 
+API_TOKEN = os.getenv("API_TOKEN")
+if not API_TOKEN:
+    raise RuntimeError("API_TOKEN must be set")
+
+_security = HTTPBearer(auto_error=False)
+
+
+def require_token(creds: HTTPAuthorizationCredentials = Depends(_security)) -> None:
+    if creds is None or not secrets.compare_digest(creds.credentials, API_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
 class LogBatch(BaseModel):
     logs: list[str]
     source: str = "unknown"
@@ -41,9 +59,43 @@ class IncidentResponse(BaseModel):
     source: str
     severity: str | None
     explanation: str | None
+    
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
+@app.get("/incidents/stats")
+async def get_stats(_: None = Depends(require_token)):
+    """Aggregate counts by severity for the dashboard metrics bar."""
+    try:
+        with psycopg2.connect(DB_URL) as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        COUNT(*) AS total,
+                        COUNT(*) FILTER (WHERE severity IS NULL) AS unprocessed,
+                        COUNT(*) FILTER (WHERE severity = 'low') AS low,
+                        COUNT(*) FILTER (WHERE severity = 'med') AS med,
+                        COUNT(*) FILTER (WHERE severity = 'high') AS high,
+                        COUNT(*) FILTER (WHERE severity = 'critical') AS critical,
+                        COUNT(DISTINCT source) AS sources
+                    FROM incidents
+                """)
+                row = cur.fetchone()
+                return {
+                    "total": row[0],
+                    "unprocessed": row[1],
+                    "low": row[2],
+                    "med": row[3],
+                    "high": row[4],
+                    "critical": row[5],
+                    "sources": row[6],
+                }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ingest")
-async def ingest_logs(batch: LogBatch):
+async def ingest_logs(batch: LogBatch, _: None = Depends(require_token)):
     """Ingest a batch of log lines"""
     try:
         with psycopg2.connect(DB_URL) as conn:
@@ -63,7 +115,7 @@ async def ingest_logs(batch: LogBatch):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/incidents")
-async def get_incidents(limit: int = 100, only_anomalies: bool = False):
+async def get_incidents(_: None = Depends(require_token), limit: int = 100, only_anomalies: bool = False):
     """Get recent incidents. Anomalies (severity != 'low') sort to the top."""
     try:
         with psycopg2.connect(DB_URL) as conn:
@@ -103,7 +155,7 @@ async def get_incidents(limit: int = 100, only_anomalies: bool = False):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/incidents/{id}")
-async def get_incident(id: int):
+async def get_incident(id: int, _: None = Depends(require_token)):
     """Get a single incident"""
     try:
         with psycopg2.connect(DB_URL) as conn:
@@ -131,7 +183,7 @@ async def get_incident(id: int):
         raise HTTPException(status_code=500, detail=str(e))
     
 @app.post("/chat")
-async def chat(req: ChatRequest):
+async def chat(req: ChatRequest, _: None = Depends(require_token)):
     """Answer a natural-language question by retrieving relevant incidents and asking the LLM."""
     from chat import answer_question  # lazy import — keeps FastAPI startup fast
     try:

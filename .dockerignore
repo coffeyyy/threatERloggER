@@ -1,0 +1,41 @@
+# Don't ship local secrets, dev environments, or anything not needed at runtime.
+
+# Secrets — never ship these
+.env
+.env.*
+**/.env
+**/.env.*
+
+# Python local state
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Worker artifacts (rebuilt in production from real data)
+worker/anomaly_model.pkl
+*.pkl
+
+# Frontend (built/shipped separately to S3, not into backend/worker images)
+frontend/
+
+# Local data
+infra/data/
+*.log
+
+# Dev tools / IDE
+.vscode/
+.idea/
+.git/
+.gitignore
+.run/
+*.swp
+.DS_Store
+
+# Docs
+README.md
+*.md
