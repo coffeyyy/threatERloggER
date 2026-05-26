@@ -1,7 +1,6 @@
 # threatERloggER
 
-AI-powered log anomaly detection with semantic search and conversational analysis. Built as a full-stack weekend project to explore production-shaped use of LLM embeddings, vector search, and AWS deployment.
-
+AI-powered log anomaly detection with semantic search and conversational analysis.
 **Live demo:** https://davvrh8i6aup5.cloudfront.net
 **API:** http://threaterlogger-alb-1997870568.us-east-2.elb.amazonaws.com/health
 **Source:** https://github.com/coffeyyy/threatERloggER
@@ -84,25 +83,10 @@ cd threatERloggER
 cp .env.example .env
 # Edit .env, set GEMINI_API_KEY and a strong API_TOKEN (any random string)
 
-make setup    # creates venv, installs deps, downloads HDFS_2k.log
-make dev      # boots Postgres, backend, worker, frontend
 ```
 
 Visit http://localhost:4200, paste your `API_TOKEN`, and you're in.
 
-To watch a live trickle of HDFS log lines flow through the pipeline:
-
-```bash
-make trickle
-```
-
-Stop everything:
-
-```bash
-make stop
-```
-
-See `Makefile` for the full list of targets (`make help`).
 
 ---
 
@@ -139,8 +123,6 @@ All endpoints except `/health` require `Authorization: Bearer <API_TOKEN>`.
 
 ## AWS deployment
 
-The whole stack runs on AWS. Each component picked to be the simplest defensible option for its job.
-
 **Postgres** — RDS `db.t4g.micro` with pgvector built in (Postgres 16+ ships with it). Public-access enabled with a security group locked to my laptop IP plus the ECS task SG.
 
 **Secrets** — `DATABASE_URL`, `GEMINI_API_KEY`, and `API_TOKEN` in Secrets Manager. The ECS task execution role has read access scoped to `threaterlogger/*` only; tasks reference secret ARNs in their definition, so the values are never stored in env files, images, or logs.
@@ -158,41 +140,7 @@ Both tasks log to CloudWatch Logs with 7-day retention. The log groups are pre-c
 
 **IAM** — Two roles. Task execution role can pull from ECR, read the threaterlogger secrets, and write to CloudWatch. Task role (used by application code) is currently a no-op; would extend it later if the app started calling AWS services directly.
 
----
 
-## What I'd do next
-
-Things that are visibly missing if you look closely:
-
-- **HTTPS on the ALB.** Frontend is on HTTPS (CloudFront), backend is on HTTP. Browsers block mixed-content requests, so the prod frontend can't actually call the prod backend without a workaround. Needs an ACM certificate, which needs a domain — would attach a cheap Route 53 hosted zone and a `*.threaterlogger.com` cert.
-- **CI/CD.** Right now I build images on my laptop and push manually. A GitHub Actions workflow that builds on `main` and pushes a new task definition revision would be the next obvious step. Most of the pieces (ECR auth, task def template) already exist.
-- **Terraform.** I created infrastructure click-by-click and via the CLI. Re-creating it in Terraform would (a) be the right thing to do, (b) make the repo a much stronger AWS portfolio piece, (c) let me tear down and rebuild for $0 between demos.
-- **A real user system.** Right now the API has a single bearer token I share with myself. Multi-user auth + per-user rate limits would let me actually let recruiters poke at it.
-- **WAF in front of CloudFront.** Free at low traffic, blocks the obvious abuse patterns. Probably the cheapest single security improvement.
-- **Worker autoscaling.** Currently 1 task. The worker is embarrassingly parallel — multiple tasks reading from the same `WHERE embedding IS NULL` queue would scale linearly. ECS service autoscaling on queue depth (custom CloudWatch metric) would do this.
-
----
-
-## Cost
-
-Running 24/7 with the current configuration:
-
-| Resource                    |    ~Monthly |
-| --------------------------- | ----------: |
-| RDS db.t4g.micro + 20GB gp3 |         $15 |
-| Fargate (backend, 0.25/0.5) |          $9 |
-| Fargate (worker, 0.5/1)     |         $18 |
-| Application Load Balancer   |         $16 |
-| Secrets Manager (3 secrets) |       $1.20 |
-| ECR storage (~600MB)        |       $0.06 |
-| S3 (~5MB) + CloudFront      |         <$1 |
-| **Total**                   | **~$60/mo** |
-
-Gemini usage on top of that is a few cents to a few dollars depending on traffic — chat enrichment via `gemini-2.5-flash` dominates; embeddings are nearly free.
-
-The ALB is by far the biggest single line item. App Runner or running behind API Gateway would be cheaper but less standard. For a portfolio demo I'd happily tear this down between interview cycles and stand it back up with a `terraform apply` (once that exists).
-
----
 
 ## Tear down
 
@@ -226,26 +174,7 @@ aws rds delete-db-instance --db-instance-identifier threaterlogger-db \
 aws s3 rm s3://threaterlogger-frontend-066949052004 --recursive
 aws s3api delete-bucket --bucket threaterlogger-frontend-066949052004
 
-# ECR + Secrets are pennies, optional to delete
 ```
-
----
-
-## Things I learned the hard way
-
-A few things were not in any tutorial I read:
-
-- **macOS 13 + ARM Mac + Docker for Fargate.** Fargate runs x86_64 by default; M-series Macs build ARM by default. `docker build --platform linux/amd64` is supposed to fix this. On Colima with older macOS, it silently builds ARM anyway. The clean fix is `docker buildx build --push` with the platform flag — buildx ships its own emulation inside a buildkit container and doesn't depend on host QEMU. Plan B is recreating Colima with `--arch x86_64`, but that needs QEMU on the host which brew couldn't install on macOS 13.
-
-- **AWS-managed policy ARNs are inconsistent.** Some policies live at `arn:aws:iam::aws:policy/<name>`, others at `arn:aws:iam::aws:policy/service-role/<name>`. The Express Mode infra policy was at `/service-role/` while the docs implied otherwise. `aws iam list-policies --scope AWS --query 'Policies[?PolicyName==\`X\`].Arn'` gets you the real one.
-
-- **RDS master user is restricted.** Not a real superuser. Creating a database owned by another user requires `GRANT <target_role> TO postgres` first. New databases also don't grant non-owner access to the `public` schema (Postgres 15+ behavior), so a fresh app user can't create tables until you `GRANT ALL ON SCHEMA public TO <app_user>`.
-
-- **`PGPASSWORD` env var silently overrides psql prompts.** Burns an hour of "auth failed" debugging on what is actually a stale env var.
-
-- **`awslogs-create-group: true` requires `logs:CreateLogGroup`** which the AWS-managed `AmazonECSTaskExecutionRolePolicy` does NOT include. Either pre-create the log group, or add the permission to your task execution role.
-
-- **ECS task security group ≠ ALB security group.** They need explicit ingress rules to talk to each other; the "tasks SG → tasks SG" trick that works for RDS doesn't apply here.
 
 ---
 
